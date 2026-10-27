@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>OpenSoar Web</title>
+<meta name="description" content="Paramotor flight instrument: map, height above ground, fuel, way home, engine-out glide reach.">
+<meta name="theme-color" content="#ffffff">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="OpenSoar">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="stylesheet" href="vendor/leaflet/leaflet.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-theme="sun">
+
+<div id="map" aria-label="Map"></div>
+
+<!-- ── In flight: floating instruments ─────────────────────────── -->
+<div id="flight" hidden>
+  <div class="top-stack">
+    <button class="glass card-row" id="topCard" aria-label="Height, speed and climb. Tap to switch height reference.">
+      <div class="val big"><span class="lbl" id="altLbl">ABOVE GROUND</span><span class="num"><b id="altVal">--</b><i id="altUnit">m</i></span><span class="sub" id="altSub"></span></div>
+      <div class="div"></div>
+      <div class="val mid"><span class="lbl">SPEED</span><span class="num"><b id="spdVal">--</b><i id="spdUnit">km/h</i></span><span class="sub" id="windSub">Wind --</span></div>
+      <div class="div"></div>
+      <div class="val sm"><span class="lbl">CLIMB</span><span class="num"><b id="varVal">0.0</b></span><span class="sub" id="varUnit">m/s</span></div>
+    </button>
+    <div id="alert" class="alert" hidden></div>
+  </div>
+
+  <div class="side">
+    <button class="round on" id="followBtn" aria-label="Follow your position">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.5"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="7" fill="none"/></svg>
+    </button>
+    <button class="round" id="themeBtn" aria-label="Switch day or night display">
+      <svg viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>
+    </button>
+  </div>
+
+  <div class="bottom-stack">
+    <div class="glass card-row">
+      <button class="val" id="fuelCell" aria-label="Fuel. Tap to report fuel."><span class="lbl">FUEL</span><span class="num"><b id="fuelVal">--</b></span><span class="sub" id="fuelSub"></span></button>
+      <div class="div"></div>
+      <div class="val"><span class="lbl">HOME</span><span class="num"><svg id="homeArrow" class="arrow" viewBox="0 0 24 24"><path d="M12 2l7 18-7-4-7 4z"/></svg><b id="homeVal">--</b><i id="homeUnit">km</i></span><span class="sub" id="homeSub"></span></div>
+      <div class="div"></div>
+      <div class="val"><span class="lbl">FLIGHT</span><span class="num"><b id="timeVal">--</b></span><span class="sub" id="sunSub"></span></div>
+    </div>
+    <div class="actions">
+      <button class="glass act" id="fuelBtn"><svg viewBox="0 0 24 24"><path d="M5 21V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v16M3 21h14M7 7h6v4H7zM15 9l3 2v7a1.5 1.5 0 0 0 3 0V8l-3-3"/></svg>Fuel</button>
+      <button class="glass act" id="markBtn"><svg viewBox="0 0 24 24"><path d="M12 22s7-6.3 7-12a7 7 0 1 0-14 0c0 5.7 7 12 7 12z"/><circle cx="12" cy="10" r="2.5"/></svg>Mark</button>
+      <button class="glass act danger" id="helpBtn"><svg viewBox="0 0 24 24"><path d="M4 4h16v12H8l-4 4z"/><path d="M8 10h.01M12 10h.01M16 10h.01"/></svg>Help</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── On the ground: preflight sheet ──────────────────────────── -->
+<section id="ground" class="sheet">
+  <div class="sheet-inner">
+    <div class="status-row">
+      <div class="gps-dot" id="gpsDot"></div>
+      <div class="grow">
+        <h2 id="gpsTitle">Waiting for GPS</h2>
+        <p id="gpsSub">Go outside with a clear view of the sky.</p>
+      </div>
+      <div class="alt-mini"><b id="gAlt">--</b><span id="gAltUnit">m altitude</span></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><span>Fuel loaded</span><span class="muted" id="gEndurance"></span></div>
+      <div class="stepper">
+        <button id="fuelMinus" aria-label="Less fuel">−</button>
+        <b id="gFuel">12.0 L</b>
+        <button id="fuelPlus" aria-label="More fuel">+</button>
+        <button class="pill" id="fuelFull">Full</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><span>Preflight checklist</span><span class="muted" id="checkCount">0 / 0</span></div>
+      <div id="checklist"></div>
+    </div>
+
+    <button class="primary" id="startFlight">Start flight now</button>
+    <p class="hint" id="groundHint">Takeoff and landing are detected automatically. Keep this screen on and the phone charging: browsers stop GPS when the screen locks.</p>
+  </div>
+</section>
+
+<!-- ── Logbook ─────────────────────────────────────────────────── -->
+<section id="logbook" class="page" hidden>
+  <h1>Logbook</h1>
+  <div class="totals panel" id="totals"></div>
+  <div id="flights"></div>
+</section>
+
+<!-- ── Settings ────────────────────────────────────────────────── -->
+<section id="settings" class="page" hidden>
+  <h1>Settings</h1>
+  <form id="settingsForm" class="panel form" autocomplete="off">
+    <h3>Pilot and gear</h3>
+    <label>Pilot name <input id="s-pilot" type="text"></label>
+    <label>Wing <input id="s-wing" type="text" placeholder="Ozone Viper 4 22"></label>
+    <label>Wing glide ratio (engine off) <input id="s-glideRatio" type="number" step="0.5" min="2" max="15" inputmode="decimal"></label>
+    <label>Trim airspeed (km/h) <input id="s-trimKmh" type="number" step="1" min="15" max="90" inputmode="decimal"></label>
+    <label>Emergency contact phone <input id="s-contact" type="tel" placeholder="+61 400 000 000"></label>
+    <h3>Fuel</h3>
+    <label>Tank size (L) <input id="s-tank" type="number" step="0.5" min="1" max="60" inputmode="decimal"></label>
+    <label>Burn rate (L/h) <input id="s-burnLph" type="number" step="0.1" min="0.5" max="20" inputmode="decimal"></label>
+    <label>Reserve (minutes) <input id="s-reserveMin" type="number" step="1" min="0" max="120" inputmode="numeric"></label>
+    <h3>Units and sound</h3>
+    <label>Altitude <select id="s-altUnit"><option value="m">Metres</option><option value="ft">Feet</option></select></label>
+    <label>Speed <select id="s-spdUnit"><option value="kmh">km/h</option><option value="mph">mph</option><option value="kt">knots</option></select></label>
+    <label>Voice callouts <select id="s-voice"><option value="off">Off</option><option value="less">Less: reserve and sunset</option><option value="normal">Normal: adds fuel checks and home reach</option><option value="more">More: adds height every 50 m</option></select></label>
+    <h3>Preflight checklist</h3>
+    <label>One item per line. Start a line with # for a section.<textarea id="s-checklist" rows="9"></textarea></label>
+  </form>
+  <div class="panel">
+    <h3>Testing</h3>
+    <p class="muted">Fly a scripted 7-minute flight near you to check the screens, voice and logbook on the ground.</p>
+    <button class="secondary" id="simBtn">Run simulated flight</button>
+  </div>
+  <p class="hint">Maps © OpenStreetMap contributors and OpenTopoMap (CC-BY-SA). Terrain: Terrain Tiles on AWS Open Data. Glide reach assumes flat ground at the height shown and still air movement apart from the wind: keep your own margin. This is a test version: use it alongside your normal instruments.</p>
+</section>
+
+<nav id="tabs">
+  <button data-tab="fly" class="on"><svg viewBox="0 0 24 24"><path d="M12 13l4-4M4.5 18a9 9 0 1 1 15 0z"/></svg>Fly</button>
+  <button data-tab="logbook"><svg viewBox="0 0 24 24"><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2zM4 19V5M8 7h7M8 11h7"/></svg>Logbook</button>
+  <button data-tab="settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.1A1.6 1.6 0 0 0 7.3 19.6l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 3.4 14H3a2 2 0 1 1 0-4h.1A1.6 1.6 0 0 0 4.4 7.3l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.6 1.6 0 0 0 10 3.4V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0 1.1 2.7H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1.3z"/></svg>Settings</button>
+</nav>
+
+<!-- ── Start: one tap unlocks GPS, voice and keep-awake ─────────── -->
+<div id="startScreen" class="overlay">
+  <div class="start-card">
+    <svg class="logo" viewBox="0 0 64 64"><path d="M6 30C18 14 46 14 58 30" /><path d="M32 30v14M26 52l6-8 6 8" /></svg>
+    <h1>OpenSoar</h1>
+    <p>Paramotor instrument: height above ground, fuel, the way home and engine-out glide reach.</p>
+    <button class="primary" id="startBtn">Start instruments</button>
+    <p class="hint">This asks for your location and keeps the screen awake. Test version: fly with your usual instruments too.</p>
+    <p class="error" id="startError" hidden></p>
+  </div>
+</div>
+
+<!-- ── Dialogs ─────────────────────────────────────────────────── -->
+<div id="fuelDialog" class="overlay" hidden>
+  <div class="dialog">
+    <h2 id="fuelDlgTitle">How much fuel is left?</h2>
+    <p class="muted" id="fuelDlgHint">Check your tank. This corrects the estimate and measures your real burn rate.</p>
+    <div class="quick">
+      <button data-frac="0.25">¼</button><button data-frac="0.5">½</button><button data-frac="0.75">¾</button><button data-frac="1">Full</button>
+    </div>
+    <div class="stepper">
+      <button id="dlgMinus" aria-label="Less">−</button><b id="dlgFuel">--</b><button id="dlgPlus" aria-label="More">+</button>
+    </div>
+    <div class="dialog-actions"><button class="secondary" id="fuelCancel">Cancel</button><button class="primary" id="fuelSave">Save</button></div>
+  </div>
+</div>
+
+<div id="helpDialog" class="overlay" hidden>
+  <div class="dialog">
+    <h2>Send your location?</h2>
+    <p id="helpText"></p>
+    <p class="mono" id="helpPos"></p>
+    <div class="dialog-actions"><button class="secondary" id="helpCancel">Cancel</button><a class="primary btn" id="helpSend" href="#">Open messages</a></div>
+  </div>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+
+<script src="vendor/leaflet/leaflet.js"></script>
+<script src="flight.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
